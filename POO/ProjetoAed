@@ -1,0 +1,193 @@
+// baixe MySQL Connector/C 
+// Vá para Tools > Compiler Options.
+//Na parte Directories, adicione os caminhos para os arquivos de cabeçalho (include) e bibliotecas (lib) do MySQL.
+// Exemplo de comandos que podemos usar
+//USE pitikinhusloja;
+//INSERT INTO Clientes (nome) VALUES ('João'), ('Maria'), ('Marquin');
+//DELETE FROM Clientes WHERE nome = 'João';
+
+#include <mysql.h>
+#include <iostream>
+#include <unordered_map>
+#include <string>
+
+using namespace std;
+
+// Classe para armazenar informações dos clientes
+class Cliente {
+public:
+    int id;
+    string nome;
+    string telefone;
+    string email;
+    string data_nascimento;
+    string cpf;
+
+    Cliente(int id, const string& nome, const string& telefone, const string& email, const string& data_nascimento, const string& cpf)
+        : id(id), nome(nome), telefone(telefone), email(email), data_nascimento(data_nascimento), cpf(cpf) {}
+};
+
+// Nó da árvore binária
+class TreeNode {
+public:
+    Cliente cliente;
+    TreeNode* left;
+    TreeNode* right;
+
+    TreeNode(const Cliente& c) : cliente(c), left(nullptr), right(nullptr) {}
+};
+
+// Classe para a árvore binária
+class BinaryTree {
+private:
+    TreeNode* root;
+
+    TreeNode* insertTreeNode(TreeNode* node, const Cliente& cliente) {
+        if (!node) return new TreeNode(cliente);
+        if (cliente.nome < node->cliente.nome)
+            node->left = insertTreeNode(node->left, cliente);
+        else
+            node->right = insertTreeNode(node->right, cliente);
+        return node;
+    }
+
+    void inorderTraversal(TreeNode* node) const {
+        if (node) {
+            inorderTraversal(node->left);
+            cout << "ID: " << node->cliente.id << ", Nome: " << node->cliente.nome << endl;
+            inorderTraversal(node->right);
+        }
+    }
+
+public:
+    BinaryTree() : root(nullptr) {}
+
+    void insert(const Cliente& cliente) {
+        root = insertTreeNode(root, cliente);
+    }
+
+    void printInOrder() const {
+        inorderTraversal(root);
+    }
+};
+
+// Classe para a tabela hash
+class HashTable {
+private:
+    unordered_map<int, Cliente> table;
+
+public:
+    void insert(const Cliente& cliente) {
+        table[cliente.id] = cliente;
+    }
+
+    Cliente* find(int id) {
+        auto it = table.find(id);
+        if (it != table.end()) {
+            return &(it->second);
+        }
+        return nullptr;
+    }
+};
+
+// Função para lidar com erros do MySQL
+void finish_with_error(MYSQL* con) {
+    cerr << "Error: " << mysql_error(con) << endl;
+    mysql_close(con);
+    exit(1);
+}
+
+int main() {
+    // Conexão com o MySQL
+    MYSQL* con = mysql_init(nullptr);
+    if (con == nullptr) {
+        cerr << "mysql_init() failed" << endl;
+        return EXIT_FAILURE;
+    }
+
+    if (mysql_real_connect(con, "localhost", "usuario", "senha", nullptr, 0, nullptr, 0) == nullptr) {
+        finish_with_error(con);
+    }
+
+    if (mysql_query(con, "CREATE DATABASE IF NOT EXISTS pitikinhusloja")) {
+        finish_with_error(con);
+    }
+
+    if (mysql_query(con, "USE pitikinhusloja")) {
+        finish_with_error(con);
+    }
+
+    const char* create_table_query = "CREATE TABLE IF NOT EXISTS Clientes ("
+        "id INT PRIMARY KEY AUTO_INCREMENT,"
+        "nome VARCHAR(100),"
+        "telefone VARCHAR(20),"
+        "email VARCHAR(100),"
+        "data_nascimento DATE,"
+        "cpf VARCHAR(14))";
+    if (mysql_query(con, create_table_query)) {
+        finish_with_error(con);
+    }
+
+    const char* insert_query = "INSERT INTO Clientes (nome, telefone, email, data_nascimento, cpf) VALUES "
+        "('João', '618581-3095', 'jualumogomes@gmail.com', '1988-07-10', '88717015006'),"
+        "('Maria', '6291835903', 'mariadacruz@gmail.com', '2000-02-02', '37215985040'),"
+        "('Marquin', '6191862875', 'marquin1817@gmail.com', '1998-05-25', '96274145060')";
+    if (mysql_query(con, insert_query)) {
+        finish_with_error(con);
+    }
+
+    // Estruturas de dados
+    HashTable clienteHashTable;
+    BinaryTree clienteTree;
+
+    if (mysql_query(con, "SELECT * FROM Clientes")) {
+        finish_with_error(con);
+    }
+
+    MYSQL_RES* result = mysql_store_result(con);
+    if (result == nullptr) {
+        finish_with_error(con);
+    }
+
+    int num_fields = mysql_num_fields(result);
+    MYSQL_ROW row;
+
+    while ((row = mysql_fetch_row(result))) {
+        Cliente cliente(
+            stoi(row[0]),
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5]
+        );
+
+        // Adiciona o cliente na tabela hash
+        clienteHashTable.insert(cliente);
+
+        // Insere o cliente na árvore binária
+        clienteTree.insert(cliente);
+    }
+
+    mysql_free_result(result);
+    mysql_close(con);
+
+    // Percorre e imprime a árvore binária
+    cout << "Clientes na árvore binária em ordem:" << endl;
+    clienteTree.printInOrder();
+
+    // Acessa e imprime um cliente da tabela hash
+    int id_to_search = 1; // ID do cliente a ser procurado
+    Cliente* cliente = clienteHashTable.find(id_to_search);
+    if (cliente) {
+        cout << "Cliente encontrado na tabela hash:" << endl;
+        cout << "ID: " << cliente->id << ", Nome: " << cliente->nome << ", Email: " << cliente->email << endl;
+    } else {
+        cout << "Cliente com ID " << id_to_search << " não encontrado na tabela hash." << endl;
+    }
+
+    return EXIT_SUCCESS;
+}
+
+
+
